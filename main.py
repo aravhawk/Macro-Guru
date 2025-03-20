@@ -1,13 +1,20 @@
 import streamlit as st
 from openai import OpenAI
 
-EXISTING_ASSISTANT_ID = "asst_AlytsWmsvS46ggYTwJzzjnx5"
+st.set_page_config(
+    page_title="Macro Guru",
+    page_icon=":bar_chart:",
+    layout="centered",
+    menu_items={
+        'Get help': 'mailto:support@aravhawk.com?subject=Need%20Help%20with%Macro%20Guru',
+        'Report a bug': 'mailto:bugs@aravhawk.com?subject=Macro%20Guru%20Bug%20Report',
+        'About': '''### Ace all your macro tests with Macro Guru! \n
+        https://macroguru.aravhawk.com'''
+    }
+)
 
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 st.title("Macro Guru")
-
-if "assistant_id" not in st.session_state:
-    st.session_state["assistant_id"] = EXISTING_ASSISTANT_ID
 
 if "thread_id" not in st.session_state:
     thread = client.beta.threads.create(messages=[])
@@ -38,7 +45,7 @@ if user_input:
     with st.spinner("Thinking..."):
         run = client.beta.threads.runs.create_and_poll(
             thread_id=st.session_state["thread_id"],
-            assistant_id=st.session_state["assistant_id"]
+            assistant_id=st.secrets["EXISTING_ASSISTANT_ID"]
         )
 
     messages = list(
