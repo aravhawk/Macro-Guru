@@ -1,0 +1,5 @@
+.streamlit/
+knowledge/
+knowledge_text.txt
+system_instructions.txt
+__pycache__/

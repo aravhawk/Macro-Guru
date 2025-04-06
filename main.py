@@ -13,50 +13,68 @@ st.set_page_config(
     }
 )
 
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 st.title("Macro Guru")
 
-if "thread_id" not in st.session_state:
-    thread = client.beta.threads.create(messages=[])
-    st.session_state["thread_id"] = thread.id
+client = OpenAI(
+    base_url="https://api.x.ai/v1",
+    api_key=st.secrets["XAI_API_KEY"]
+)
 
-if "chat_history" not in st.session_state:
-    st.session_state["chat_history"] = []
+model = "grok-2-latest"
 
-def display_message(role, content):
-    with st.chat_message(role):
-        st.markdown(content)
+with open('system_instructions.txt') as file:
+    system_instructions = file.read()
 
-for msg in st.session_state["chat_history"]:
-    display_message(msg["role"], msg["content"])
+try:
+    with open('./knowledge_text.txt', 'r', encoding='utf-8') as file:
+        knowledge_text = file.read()
+except FileNotFoundError:
+    st.error("Knowledge base file not found. Please run generate_knowledge.py first to create the knowledge base.")
+    knowledge_text = "No knowledge base available."
 
-user_input = st.chat_input("Ask anything about Macroeconomics...")
+full_instructions = f"{system_instructions}\n\n# KNOWLEDGE BASE\n{knowledge_text}"
 
-if user_input:
-    display_message("user", user_input)
-    st.session_state["chat_history"].append({"role": "user", "content": user_input})
+if "messages" not in st.session_state:
+    st.session_state["messages"] = []
 
-    client.beta.threads.messages.create(
-        thread_id=st.session_state["thread_id"],
-        role="user",
-        content=user_input
-    )
+for message in st.session_state["messages"]:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-    with st.spinner("Thinking..."):
-        run = client.beta.threads.runs.create_and_poll(
-            thread_id=st.session_state["thread_id"],
-            assistant_id=st.secrets["EXISTING_ASSISTANT_ID"]
+prompt = st.chat_input("Ask anything about Macroeconomics...")
+
+if prompt is not None:
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    with st.chat_message("assistant"):
+        message_placeholder = st.empty()
+        full_response = ""
+        first_response_received = False
+
+        response_generator = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "system", "content": full_instructions}] +
+                     [{"role": m["role"], "content": m["content"]} for m in st.session_state["messages"]],
+            stream=True
         )
 
-    messages = list(
-        client.beta.threads.messages.list(thread_id=st.session_state["thread_id"], run_id=run.id)
-    )
+        with st.spinner("Thinking..."):
+            for response in response_generator:
+                incremental_content = response.choices[0].delta.content or ""
+                full_response += incremental_content
 
-    assistant_reply = messages[-1]
-    final_text = ""
-    for block in assistant_reply.content:
-        if block.type == "text":
-            final_text += block.text.value
+                if not first_response_received and incremental_content:
+                    first_response_received = True
+                    break
 
-    display_message("assistant", final_text)
-    st.session_state["chat_history"].append({"role": "assistant", "content": final_text})
+        message_placeholder.markdown(full_response)
+
+        for response in response_generator:
+            incremental_content = response.choices[0].delta.content or ""
+            full_response += incremental_content
+            message_placeholder.markdown(full_response + "⬤")
+            message_placeholder.markdown(full_response)
+
+        st.session_state["messages"].append({"role": "assistant", "content": full_response})
