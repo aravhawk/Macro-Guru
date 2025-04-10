@@ -1,4 +1,5 @@
 streamlit
+streamlit-local-storage
 openai
 python-pptx
 python-docx

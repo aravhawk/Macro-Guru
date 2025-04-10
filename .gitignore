@@ -3,4 +3,5 @@ knowledge/
 knowledge_text.txt
 system_instructions.txt
 .DS_Store
+.idea/
 __pycache__/

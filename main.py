@@ -1,5 +1,13 @@
 import streamlit as st
 from openai import OpenAI
+from streamlit_local_storage import LocalStorage
+
+
+def init_local_storage():
+    return LocalStorage()
+
+
+local_storage = init_local_storage()
 
 st.set_page_config(
     page_title="Macro Guru",
@@ -12,6 +20,11 @@ st.set_page_config(
         https://macroguru.aravhawk.com'''
     }
 )
+
+if "clear_chat_requested" in st.session_state and st.session_state["clear_chat_requested"]:
+    local_storage.deleteItem("chat_history")
+    st.session_state["clear_chat_requested"] = False
+    st.session_state["messages"] = []
 
 st.title("Macro Guru")
 
@@ -34,8 +47,21 @@ except FileNotFoundError:
 
 full_instructions = f"{system_instructions}\n\n# KNOWLEDGE BASE\n{knowledge_text}"
 
+stored_messages = local_storage.getItem("chat_history")
+
 if "messages" not in st.session_state:
+    if stored_messages:
+        st.session_state["messages"] = stored_messages
+    else:
+        st.session_state["messages"] = []
+
+if "clear_chat_requested" not in st.session_state:
+    st.session_state["clear_chat_requested"] = False
+
+if st.sidebar.button("Clear Chat History"):
+    st.session_state["clear_chat_requested"] = True
     st.session_state["messages"] = []
+    st.rerun()
 
 for message in st.session_state["messages"]:
     with st.chat_message(message["role"]):
@@ -78,3 +104,5 @@ if prompt is not None:
             message_placeholder.markdown(full_response)
 
         st.session_state["messages"].append({"role": "assistant", "content": full_response})
+
+        local_storage.setItem("chat_history", st.session_state["messages"])
