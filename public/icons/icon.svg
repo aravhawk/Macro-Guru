@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#0A0A0F" rx="64"/>
+  <rect x="40" y="40" width="432" height="432" fill="none" stroke="#10B981" stroke-width="2" rx="32" opacity="0.3"/>
+  <text x="256" y="200" text-anchor="middle" font-family="system-ui, sans-serif" font-size="120" font-weight="bold" fill="#10B981">MG</text>
+  <line x1="100" y1="280" x2="412" y2="280" stroke="#1A1A2E" stroke-width="2"/>
+  <polyline points="100,380 160,340 220,350 280,300 340,320 412,290" fill="none" stroke="#10B981" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="100,420 160,400 220,380 280,360 340,370 412,340" fill="none" stroke="#F59E0B" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+</svg>
