@@ -29,7 +29,8 @@ export function useTurnstile() {
 
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
         sitekey: siteKey,
-        size: 'invisible',
+        size: 'flexible',
+        appearance: 'interaction-only',
         callback: (token: string) => {
           tokenRef.current = token;
         },
