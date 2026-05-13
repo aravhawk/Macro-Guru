@@ -1,13 +1,6 @@
-import type { Metadata } from 'next';
-import { Playfair_Display, DM_Sans } from 'next/font/google';
+import type { Metadata, Viewport } from 'next';
+import { DM_Sans } from 'next/font/google';
 import './globals.css';
-
-const playfair = Playfair_Display({
-  subsets: ['latin'],
-  variable: '--font-playfair',
-  weight: ['400', '600', '700'],
-  display: 'swap',
-});
 
 const dmSans = DM_Sans({
   subsets: ['latin'],
@@ -21,10 +14,40 @@ export const metadata: Metadata = {
   description: 'Your AP Macroeconomics AI tutor — ace every test with confidence.',
 };
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#000000' },
+  ],
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${playfair.variable} ${dmSans.variable}`}>
-      <body>{children}</body>
+    <html lang="en" suppressHydrationWarning className={dmSans.variable}>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var stored = localStorage.getItem('macro_guru_theme');
+                  if (stored === 'system') {
+                    localStorage.removeItem('macro_guru_theme');
+                    stored = null;
+                  }
+                  var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  var isDark = stored === 'dark' || (stored !== 'light' && systemDark);
+                  document.documentElement.classList.toggle('dark', isDark);
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }
