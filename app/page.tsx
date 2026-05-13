@@ -2,12 +2,15 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useConversations } from './hooks/useConversations';
+import { useRateLimit } from './hooks/useRateLimit';
+import { useTurnstile } from './hooks/useTurnstile';
 import { Sidebar } from './components/Sidebar';
 import { ChatMessage } from './components/ChatMessage';
 import { EmptyState } from './components/EmptyState';
 import { InputBar } from './components/InputBar';
 import { Logo } from './components/Logo';
 import { ThemeToggle } from './components/ThemeToggle';
+import { UsageTracker } from './components/UsageTracker';
 
 export default function Home() {
   const {
@@ -24,12 +27,15 @@ export default function Home() {
     sendMessage,
   } = useConversations();
 
+  const { used, limit, isLimitReached, increment } = useRateLimit();
+  const { containerRef: turnstileRef, getToken } = useTurnstile();
+
   const [input, setInput] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const disabled = isStreaming || isInitializing;
+  const disabled = isStreaming || isInitializing || isLimitReached;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -38,14 +44,17 @@ export default function Home() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const userMessage = input.trim();
-    if (!userMessage) return;
+    if (!userMessage || isLimitReached) return;
 
+    const token = getToken();
     setInput('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
-    const result = await sendMessage(userMessage);
+    const result = await sendMessage(userMessage, token ?? undefined);
     if (result === 'thread-error') {
       setInput(userMessage);
+    } else if (result === 'success') {
+      increment();
     }
   };
 
@@ -104,6 +113,11 @@ export default function Home() {
       )}
 
       <div className="flex flex-col flex-1 min-w-0 relative">
+        {/* Desktop usage tracker */}
+        <div className="hidden md:block absolute top-3 right-3 z-10">
+          <UsageTracker used={used} limit={limit} />
+        </div>
+
         {/* Mobile header */}
         <header className="md:hidden flex items-center justify-between shrink-0 px-3 py-2.5 border-b border-border bg-card">
           <div className="flex items-center gap-2.5">
@@ -111,9 +125,7 @@ export default function Home() {
             <span className="text-sm font-semibold text-foreground">Macro Guru</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-muted-foreground tabular-nums">
-              {messages.length}
-            </span>
+            <UsageTracker used={used} limit={limit} />
             <ThemeToggle />
           </div>
         </header>
@@ -170,10 +182,13 @@ export default function Home() {
           value={input}
           disabled={disabled}
           storageWarning={storageWarning}
+          rateLimitReached={isLimitReached}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           onSubmit={handleSubmit}
         />
+
+        <div ref={turnstileRef} className="hidden" />
       </div>
     </div>
   );

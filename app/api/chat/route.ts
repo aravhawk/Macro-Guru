@@ -3,8 +3,28 @@ import OpenAI from 'openai';
 import { SYSTEM_INSTRUCTIONS } from '@/lib/constants';
 
 export async function POST(request: NextRequest) {
+  const { threadId, message, turnstileToken } = await request.json();
+
+  const secretKey = process.env.TURNSTILE_SECRET_KEY;
+  if (secretKey) {
+    const verifyRes = await fetch(
+      'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secret: secretKey, response: turnstileToken ?? '' }),
+      },
+    );
+    const verification = await verifyRes.json();
+    if (!verification.success) {
+      return new Response(
+        JSON.stringify({ error: 'Verification failed' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+  }
+
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const { threadId, message } = await request.json();
 
   await openai.beta.threads.messages.create(threadId, {
     role: 'user',

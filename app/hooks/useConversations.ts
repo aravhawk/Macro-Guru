@@ -293,7 +293,7 @@ export function useConversations() {
     return threadId;
   }, [replaceConversation]);
 
-  const sendMessage = useCallback(async (text: string): Promise<SendResult> => {
+  const sendMessage = useCallback(async (text: string, turnstileToken?: string): Promise<SendResult> => {
     const userMessage = text.trim();
     const conversationId = activeIdRef.current;
     const conversation = conversationsRef.current.find(c => c.id === conversationId);
@@ -325,7 +325,7 @@ export function useConversations() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ threadId, message: userMessage }),
+        body: JSON.stringify({ threadId, message: userMessage, turnstileToken }),
       });
 
       if (!res.ok || !res.body) throw new Error('Stream request failed');

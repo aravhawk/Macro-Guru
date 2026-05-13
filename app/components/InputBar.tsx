@@ -6,13 +6,14 @@ interface InputBarProps {
   value: string;
   disabled: boolean;
   storageWarning: boolean;
+  rateLimitReached: boolean;
   onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onSubmit: (e: React.FormEvent) => void;
 }
 
 export const InputBar = forwardRef<HTMLTextAreaElement, InputBarProps>(function InputBar(
-  { value, disabled, storageWarning, onChange, onKeyDown, onSubmit },
+  { value, disabled, storageWarning, rateLimitReached, onChange, onKeyDown, onSubmit },
   ref,
 ) {
   const [focused, setFocused] = useState(false);
@@ -33,7 +34,7 @@ export const InputBar = forwardRef<HTMLTextAreaElement, InputBarProps>(function 
             onChange={onChange}
             onKeyDown={onKeyDown}
             disabled={disabled}
-            placeholder="Ask anything about Macroeconomics..."
+            placeholder={rateLimitReached ? 'Daily message limit reached...' : 'Ask anything about Macroeconomics...'}
             rows={1}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
@@ -55,8 +56,12 @@ export const InputBar = forwardRef<HTMLTextAreaElement, InputBarProps>(function 
             </svg>
           </button>
         </div>
-        <p className={`text-center text-[11px] mt-2 ${storageWarning ? 'text-destructive' : 'text-muted-foreground'}`}>
-          {storageWarning ? 'Conversation changes could not be saved locally.' : 'Enter to send · Shift + Enter for new line'}
+        <p className={`text-center text-[11px] mt-2 ${rateLimitReached || storageWarning ? 'text-destructive' : 'text-muted-foreground'}`}>
+          {rateLimitReached
+            ? 'Daily message limit reached. Resets at midnight.'
+            : storageWarning
+              ? 'Conversation changes could not be saved locally.'
+              : 'Enter to send · Shift + Enter for new line'}
         </p>
       </form>
     </div>
