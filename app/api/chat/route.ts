@@ -1,22 +1,28 @@
-import { cookies } from 'next/headers';
 import OpenAI from 'openai';
 import { SYSTEM_INSTRUCTIONS } from '@/lib/constants';
-import { getUserFromCookies } from '@/lib/auth';
+import { getUser } from '@/lib/auth';
 import { sql } from '@/lib/db';
 
 const DAILY_LIMIT = 50;
 
+function jsonResponse(body: unknown, status: number) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 export async function POST(request: Request) {
-  const cookieStore = await cookies();
-  const user = await getUserFromCookies(cookieStore);
+  const user = await getUser();
   if (!user) {
-    return new Response(
-      JSON.stringify({ error: 'Unauthorized' }),
-      { status: 401, headers: { 'Content-Type': 'application/json' } },
-    );
+    return jsonResponse({ error: 'Unauthorized' }, 401);
   }
 
-  const { threadId, conversationId, message, turnstileToken } = await request.json();
+  const { conversationId, message, turnstileToken } = await request.json();
+
+  if (!conversationId || typeof message !== 'string' || !message.trim()) {
+    return jsonResponse({ error: 'conversationId and message are required' }, 400);
+  }
 
   // Turnstile verification (optional)
   const secretKey = process.env.TURNSTILE_SECRET_KEY;
@@ -31,11 +37,33 @@ export async function POST(request: Request) {
     );
     const verification = await verifyRes.json();
     if (!verification.success) {
-      return new Response(
-        JSON.stringify({ error: 'Verification failed' }),
-        { status: 403, headers: { 'Content-Type': 'application/json' } },
-      );
+      return jsonResponse({ error: 'Verification failed' }, 403);
     }
+  }
+
+  // Verify the conversation belongs to the authenticated user and read its
+  // server-stored thread id. We never trust a client-supplied threadId — doing
+  // so previously let a caller append to (and read from) another user's thread.
+  const owned = await sql`
+    SELECT thread_id, title FROM conversations
+    WHERE id = ${conversationId} AND user_id = ${user.id}
+  `;
+  if (owned.length === 0) {
+    return jsonResponse({ error: 'Not found' }, 404);
+  }
+  const { thread_id: storedThreadId, title } = owned[0] as { thread_id: string | null; title: string };
+
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+  // Provision a thread on demand if one was never created for this conversation.
+  let threadId = storedThreadId;
+  if (!threadId) {
+    const thread = await openai.beta.threads.create();
+    threadId = thread.id;
+    await sql`
+      UPDATE conversations SET thread_id = ${threadId}, updated_at = NOW()
+      WHERE id = ${conversationId} AND user_id = ${user.id}
+    `;
   }
 
   // Server-side rate limiting
@@ -46,10 +74,7 @@ export async function POST(request: Request) {
   const currentCount = rateResult.length > 0 ? (rateResult[0] as { count: number }).count : 0;
 
   if (currentCount >= DAILY_LIMIT) {
-    return new Response(
-      JSON.stringify({ error: 'Daily message limit reached. Resets at midnight UTC.' }),
-      { status: 429, headers: { 'Content-Type': 'application/json' } },
-    );
+    return jsonResponse({ error: 'Daily message limit reached. Resets at midnight UTC.' }, 429);
   }
 
   // Increment rate limit
@@ -60,31 +85,20 @@ export async function POST(request: Request) {
     DO UPDATE SET count = rate_limits.count + 1
   `;
 
-  // Store user message in DB
-  if (conversationId) {
-    await sql`
-      INSERT INTO messages (conversation_id, role, content)
-      VALUES (${conversationId}, 'user', ${message})
-    `;
+  // Store user message (conversation ownership verified above).
+  await sql`
+    INSERT INTO messages (conversation_id, role, content)
+    VALUES (${conversationId}, 'user', ${message})
+  `;
 
-    // Update conversation timestamp and auto-title
-    const conv = await sql`
-      SELECT title, (SELECT COUNT(*) FROM messages WHERE conversation_id = ${conversationId}) as msg_count
-      FROM conversations WHERE id = ${conversationId} AND user_id = ${user.id}
-    `;
-    if (conv.length > 0) {
-      const { title, msg_count } = conv[0] as { title: string; msg_count: string };
-      const newTitle = title === 'New Conversation' && Number(msg_count) <= 2
-        ? message.slice(0, 50).trim() || 'New Conversation'
-        : title;
-      await sql`
-        UPDATE conversations SET title = ${newTitle}, updated_at = NOW()
-        WHERE id = ${conversationId}
-      `;
-    }
-  }
-
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  // Auto-title from the first user message.
+  const newTitle = title === 'New Conversation'
+    ? message.slice(0, 50).trim() || 'New Conversation'
+    : title;
+  await sql`
+    UPDATE conversations SET title = ${newTitle}, updated_at = NOW()
+    WHERE id = ${conversationId} AND user_id = ${user.id}
+  `;
 
   await openai.beta.threads.messages.create(threadId, {
     role: 'user',
@@ -113,7 +127,7 @@ export async function POST(request: Request) {
         await run.finalRun();
 
         // Store assistant response in DB
-        if (conversationId && fullResponse) {
+        if (fullResponse) {
           try {
             await sql`
               INSERT INTO messages (conversation_id, role, content)

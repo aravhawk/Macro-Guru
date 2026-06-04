@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { getUserFromCookies } from '@/lib/auth';
+import { getUser } from '@/lib/auth';
 import { sql } from '@/lib/db';
 
 interface MigrationConversation {
@@ -14,8 +13,7 @@ interface MigrationConversation {
 
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const user = await getUserFromCookies(cookieStore);
+    const user = await getUser();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -39,14 +37,16 @@ export async function POST(request: Request) {
         continue;
       }
 
-      // Insert conversation
+      // Insert conversation. user_id is the Neon Auth id (text). We do NOT
+      // persist the client-supplied threadId — a fresh OpenAI thread is created
+      // server-side on the first message instead.
       await sql`
         INSERT INTO conversations (id, user_id, title, thread_id, created_at, updated_at)
         VALUES (
           ${conv.id}::uuid,
-          ${user.id}::uuid,
+          ${user.id},
           ${conv.title || 'New Conversation'},
-          ${conv.threadId},
+          ${null},
           ${new Date(conv.createdAt).toISOString()},
           ${new Date(conv.updatedAt).toISOString()}
         )

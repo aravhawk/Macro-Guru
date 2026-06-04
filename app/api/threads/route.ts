@@ -1,13 +1,11 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import OpenAI from 'openai';
-import { getUserFromCookies } from '@/lib/auth';
+import { getUser } from '@/lib/auth';
 import { sql } from '@/lib/db';
 
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const user = await getUserFromCookies(cookieStore);
+    const user = await getUser();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

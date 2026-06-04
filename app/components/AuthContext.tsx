@@ -1,6 +1,7 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, ReactNode } from 'react';
+import { authClient } from '@/lib/auth-client';
 
 interface User {
   id: string;
@@ -18,69 +19,33 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    checkSession();
-  }, []);
-
-  async function checkSession() {
-    try {
-      const res = await fetch('/api/auth/session');
-      const data = await res.json();
-      if (data.user) {
-        setUser(data.user);
-      }
-    } catch (error) {
-      console.error('Session check failed:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { data, isPending } = authClient.useSession();
+  const user: User | null = data?.user
+    ? { id: data.user.id, email: data.user.email }
+    : null;
 
   async function signup(email: string, password: string) {
-    const res = await fetch('/api/auth/signup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+    // Neon Auth requires a name; derive it from the email local-part so the
+    // sign-up form stays email + password only.
+    const { error } = await authClient.signUp.email({
+      email,
+      password,
+      name: email.split('@')[0] || email,
     });
-
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || 'Signup failed');
-    }
-
-    setUser(data.user);
+    if (error) throw new Error(error.message || 'Signup failed');
   }
 
   async function signin(email: string, password: string) {
-    const res = await fetch('/api/auth/signin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || 'Signin failed');
-    }
-
-    setUser(data.user);
+    const { error } = await authClient.signIn.email({ email, password });
+    if (error) throw new Error(error.message || 'Signin failed');
   }
 
   async function signout() {
-    try {
-      await fetch('/api/auth/signout', { method: 'POST' });
-    } catch (error) {
-      console.error('Signout failed:', error);
-    } finally {
-      setUser(null);
-    }
+    await authClient.signOut();
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signup, signin, signout }}>
+    <AuthContext.Provider value={{ user, loading: isPending, signup, signin, signout }}>
       {children}
     </AuthContext.Provider>
   );
