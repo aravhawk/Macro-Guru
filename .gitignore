@@ -1,6 +1,8 @@
 .DS_Store
 .next/
 node_modules/
+package-lock.json
+yarn.lock
 .env.local
 *.tsbuildinfo
 .vercel
