@@ -15,9 +15,11 @@ interface SidebarProps {
   onNew: () => void;
   onDelete: (id: string) => void;
   onRename: (id: string, title: string) => void;
+  userEmail: string;
+  onSignout: () => void;
 }
 
-export function Sidebar({ conversations, activeId, disabled, isOpen, onToggle, onSwitch, onNew, onDelete, onRename }: SidebarProps) {
+export function Sidebar({ conversations, activeId, disabled, isOpen, onToggle, onSwitch, onNew, onDelete, onRename, userEmail, onSignout }: SidebarProps) {
   const sorted = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt);
 
   return (
@@ -72,6 +74,26 @@ export function Sidebar({ conversations, activeId, disabled, isOpen, onToggle, o
           </svg>
           New conversation
         </button>
+      </div>
+
+      <div className="px-3 py-3 border-t border-border">
+        <div className="flex items-center justify-between gap-2 px-1">
+          <span className="text-xs text-muted-foreground truncate flex-1" title={userEmail}>
+            {userEmail}
+          </span>
+          <button
+            onClick={onSignout}
+            className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            aria-label="Sign out"
+            title="Sign out"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" x2="9" y1="12" y2="12"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div className="px-4 py-3 flex gap-3 text-[11px] text-muted-foreground">

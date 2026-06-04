@@ -11,15 +11,21 @@ import { InputBar } from './components/InputBar';
 import { Logo } from './components/Logo';
 import { ThemeToggle } from './components/ThemeToggle';
 import { UsageTracker } from './components/UsageTracker';
+import { useAuth } from './components/AuthContext';
+import { AuthModal } from './components/AuthModal';
+import type { Conversation } from './hooks/useConversations';
+
+const STORAGE_KEY = 'macro_guru_conversations';
+const LEGACY_KEY = 'chat_data';
 
 export default function Home() {
+  const { user, loading: authLoading, signout } = useAuth();
   const {
     conversations,
     activeId,
     messages,
     isInitializing,
     isStreaming,
-    storageWarning,
     createNewConversation,
     switchConversation,
     deleteConversation,
@@ -34,8 +40,72 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [migrating, setMigrating] = useState(false);
 
-  const disabled = isStreaming || isInitializing || isLimitReached;
+  const disabled = isStreaming || isInitializing || isLimitReached || !user;
+
+  // Handle localStorage migration after auth
+  useEffect(() => {
+    if (!user || migrating) return;
+
+    async function migrateLocalStorage() {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      const legacy = localStorage.getItem(LEGACY_KEY);
+
+      if (!stored && !legacy) return;
+
+      setMigrating(true);
+
+      try {
+        let conversations: Conversation[] = [];
+
+        if (stored) {
+          try {
+            const data = JSON.parse(stored);
+            if (data.conversations && Array.isArray(data.conversations)) {
+              conversations = data.conversations;
+            }
+          } catch {}
+        } else if (legacy) {
+          try {
+            const data = JSON.parse(legacy);
+            if (data.messages) {
+              conversations = [{
+                id: crypto.randomUUID(),
+                title: 'Migrated Conversation',
+                threadId: data.threadId || null,
+                messages: data.messages,
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+              }];
+            }
+          } catch {}
+        }
+
+        if (conversations.length > 0) {
+          const res = await fetch('/api/conversations/migrate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conversations }),
+          });
+
+          if (res.ok) {
+            localStorage.removeItem(STORAGE_KEY);
+            localStorage.removeItem(LEGACY_KEY);
+          }
+        } else {
+          localStorage.removeItem(STORAGE_KEY);
+          localStorage.removeItem(LEGACY_KEY);
+        }
+      } catch (error) {
+        console.error('Migration error:', error);
+      } finally {
+        setMigrating(false);
+      }
+    }
+
+    migrateLocalStorage();
+  }, [user, migrating]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -44,7 +114,7 @@ export default function Home() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const userMessage = input.trim();
-    if (!userMessage || isLimitReached) return;
+    if (!userMessage || isLimitReached || !user) return;
 
     const token = getToken();
     setInput('');
@@ -55,6 +125,8 @@ export default function Home() {
       setInput(userMessage);
     } else if (result === 'success') {
       increment();
+    } else if (result === 'rate-limit') {
+      alert('Daily message limit reached. Resets at midnight UTC.');
     }
   };
 
@@ -82,6 +154,19 @@ export default function Home() {
     }, 0);
   };
 
+  // Show auth modal if not authenticated
+  if (authLoading) {
+    return (
+      <div className="flex h-[100dvh] items-center justify-center bg-background">
+        <div className="w-7 h-7 rounded-full border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthModal />;
+  }
+
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-background text-foreground">
       <div className="noise-overlay" aria-hidden="true" />
@@ -96,6 +181,8 @@ export default function Home() {
         onNew={createNewConversation}
         onDelete={deleteConversation}
         onRename={renameConversation}
+        userEmail={user.email}
+        onSignout={signout}
       />
 
       {/* Sidebar toggle when collapsed (desktop) */}
@@ -155,7 +242,7 @@ export default function Home() {
 
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto px-4 md:px-6 py-4 md:py-10">
-            {isInitializing ? (
+            {isInitializing || migrating ? (
               <div className="flex justify-center pt-32">
                 <div className="w-7 h-7 rounded-full border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin" />
               </div>
@@ -181,7 +268,7 @@ export default function Home() {
           ref={textareaRef}
           value={input}
           disabled={disabled}
-          storageWarning={storageWarning}
+          storageWarning={false}
           rateLimitReached={isLimitReached}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}

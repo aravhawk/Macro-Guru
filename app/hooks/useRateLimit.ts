@@ -1,53 +1,38 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { useAuth } from '../components/AuthContext';
 
-const STORAGE_KEY = 'macro_guru_daily_usage';
 const DAILY_LIMIT = 50;
 
-interface UsageData {
-  count: number;
-  date: string;
-}
-
-function getTodayKey(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function loadUsage(): UsageData {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const data = JSON.parse(stored) as UsageData;
-      if (data.date === getTodayKey()) return data;
-    }
-  } catch {}
-  return { count: 0, date: getTodayKey() };
-}
-
 export function useRateLimit() {
-  const [usage, setUsage] = useState<UsageData>({ count: 0, date: getTodayKey() });
+  const { user } = useAuth();
+  const [used, setUsed] = useState(0);
 
   useEffect(() => {
-    setUsage(loadUsage());
-  }, []);
+    if (!user) {
+      setUsed(0);
+      return;
+    }
 
-  const increment = useCallback(() => {
-    setUsage(prev => {
-      const today = getTodayKey();
-      const next: UsageData = {
-        count: (prev.date === today ? prev.count : 0) + 1,
-        date: today,
-      };
+    async function fetchUsage() {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  }, []);
+        const res = await fetch('/api/rate-limit');
+        if (res.ok) {
+          const data = await res.json();
+          setUsed(data.used);
+        }
+      } catch (error) {
+        console.error('Failed to fetch rate limit:', error);
+      }
+    }
 
-  const today = getTodayKey();
-  const used = usage.date === today ? usage.count : 0;
+    fetchUsage();
+  }, [user]);
+
+  const increment = () => {
+    setUsed(prev => prev + 1);
+  };
 
   return {
     used,
